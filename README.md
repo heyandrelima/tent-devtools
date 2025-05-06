@@ -1,55 +1,110 @@
-# React + TypeScript + Vite
+# Vite + React + TypeScript + Electron + Tailwind CSS Starter
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This template provides a minimal setup to kickstart a desktop application using **Vite**, **React**, **TypeScript**, **Electron**, and **Tailwind CSS**. It includes hot module replacement (HMR), ESLint configuration, and a streamlined development workflow.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Vite**: Fast build tool with HMR for a smooth development experience.
+- **React**: A powerful library for building user interfaces.
+- **TypeScript**: Static typing for better code quality and maintainability.
+- **Electron**: Build cross-platform desktop applications.
+- **Tailwind CSS**: Utility-first CSS framework for rapid UI development.
+- **ESLint**: Pre-configured linting for consistent and error-free code.
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+Ensure you have the following installed:
+
+- [Node.js](https://nodejs.org/) (v16 or higher recommended)
+- [pnpm](https://pnpm.io/) (preferred package manager)
+
+### Installation
+
+1. Clone this repository:
+
+   ```bash
+   git clone https://github.com/your-repo/vite-react-tailwind-electron.git
+   cd vite-react-tailwind-electron
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   pnpm install
+   ```
+
+### Development
+
+To start the development server and Electron app:
+
+```bash
+pnpm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+This will:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- Start the Vite development server on `http://localhost:5173`.
+- Launch the Electron app and load the Vite server.
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### Build
+
+To build the production-ready Electron app:
+
+```bash
+pnpm run build
 ```
-# electron-react-vite-tailwind
+
+This will bundle the Vite app and package the Electron app using `electron-builder`.
+
+### Linting
+
+To lint your code:
+
+```bash
+pnpm run lint
+```
+
+## Project Structure
+
+```
+├── public/               # Static assets
+├── src/                  # Source code
+│   ├── assets/           # Images and other assets
+│   ├── App.tsx           # Main React component
+│   ├── main.tsx          # React entry point
+│   ├── vite-env.d.ts     # Vite environment types
+├── main.js               # Electron main process
+├── index.html            # HTML template
+├── package.json          # Project metadata and scripts
+├── vite.config.ts        # Vite configuration
+├── tailwind.config.js    # Tailwind CSS configuration
+├── tsconfig.json         # TypeScript configuration
+└── tsconfig.app.json     # Additional TypeScript configuration
+```
+
+## Dependencies
+
+### Core Dependencies
+
+- `react`: UI library
+- `react-dom`: React DOM rendering
+- `electron`: Desktop app framework
+- `tailwindcss`: CSS framework
+
+### Development Dependencies
+
+- `vite`: Build tool
+- `@vitejs/plugin-react`: React plugin for Vite
+- `typescript`: TypeScript support
+- `eslint`: Linting tool
+- `typescript-eslint`: TypeScript linting rules
+- `eslint-plugin-react-hooks`: React hooks linting
+- `eslint-plugin-react-refresh`: React Fast Refresh linting
+- `concurrently`: Run multiple commands concurrently
+- `wait-on`: Wait for resources to be available
+
+## License
+
+This project is licensed under the MIT License. Feel free to use it as a starting point for your own projects.
