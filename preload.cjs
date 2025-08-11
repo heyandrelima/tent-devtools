@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('tend', {
   },
   serviceStatus: async () => {
     return await ipcRenderer.invoke('service:status');
+  },
+  showWindow: async () => {
+    return await ipcRenderer.invoke('tray:showWindow');
+  },
+  hideWindow: async () => {
+    return await ipcRenderer.invoke('tray:hideWindow');
   }
 });
 

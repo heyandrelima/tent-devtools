@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, globalShortcut } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs/promises";
@@ -134,6 +134,9 @@ let serviceState = {
   rootZones: /** @type {Set<string>} */ (new Set()),
   mappingsWatcher: /** @type {import('node:fs').FSWatcher | null} */ (null),
 };
+
+let tray = /** @type {Tray | null} */ (null);
+let mainWindow = /** @type {BrowserWindow | null} */ (null);
 
 // Use an unprivileged DNS port to avoid sudo and mDNS conflicts
 const DNS_PORT = 15353;
@@ -272,19 +275,19 @@ async function updateSystemDNS() {
   // Ensure /etc/resolver/test points to our local DNS on DNS_PORT
   try {
     await new Promise((resolve, reject) => {
-      exec('sudo mkdir -p /etc/resolver', (err) => (err ? reject(err) : resolve()))
+      exec('mkdir -p /etc/resolver', (err) => (err ? reject(err) : resolve()))
     });
   } catch {}
   const content = `nameserver 127.0.0.1\nport ${DNS_PORT}\n`;
   await new Promise((resolve) => {
-    exec(`echo "${content.replace(/\n/g, '\\n')}" | sudo tee ${RESOLVER_FILE} >/dev/null`, () => resolve());
+    exec(`echo "${content.replace(/\n/g, '\\n')}" | tee ${RESOLVER_FILE} >/dev/null`, () => resolve());
   });
 }
 
 async function cleanupSystemDNS() {
   if (process.platform !== 'darwin') return;
   await new Promise((resolve) => {
-    exec(`sudo rm -f ${RESOLVER_FILE}`, () => resolve());
+    exec(`rm -f ${RESOLVER_FILE}`, () => resolve());
   });
 }
 
@@ -333,7 +336,129 @@ function openSetupWindow() {
   if (isDev) {
     win.loadURL("http://localhost:5173/setup.html");
   } else {
-    win.loadFile(path.join(__dirname, "setup.html"));
+    win.loadFile(path.join(__dirname, "dist", "setup.html"));
+  }
+}
+
+function createTray() {
+  // Create tray icons
+  const greenIcon = nativeImage.createFromPath(path.join(__dirname, 'public', 'tray-icon-green.svg'));
+  const redIcon = nativeImage.createFromPath(path.join(__dirname, 'public', 'tray-icon-red.svg'));
+  
+  // Resize icons to appropriate size for system tray
+  const iconSize = process.platform === 'darwin' ? 16 : 32;
+  const resizedGreenIcon = greenIcon.resize({ width: iconSize, height: iconSize });
+  const resizedRedIcon = redIcon.resize({ width: iconSize, height: iconSize });
+  
+  // Create tray with initial red icon (server stopped)
+  tray = new Tray(resizedRedIcon);
+  
+  updateTrayMenu();
+  
+  tray.setToolTip('Tend Devtools - Server Stopped');
+  
+  // Handle tray click (show window)
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Tend Devtools',
+      enabled: false,
+    },
+    {
+      label: `Server: ${serviceState.running ? 'Running' : 'Stopped'}`,
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Show Window',
+      accelerator: process.platform === 'darwin' ? 'Cmd+Shift+T' : 'Ctrl+Shift+T',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      },
+    },
+    {
+      label: serviceState.running ? 'Stop Server' : 'Start Server',
+      click: async () => {
+        try {
+          if (serviceState.running) {
+            await stopService();
+          } else {
+            await startService();
+          }
+        } catch (error) {
+          console.error('Failed to toggle service from tray:', error);
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        app.quit();
+      },
+    },
+  ]);
+  
+  tray.setContextMenu(contextMenu);
+}
+
+function updateTrayIcon(isRunning) {
+  if (!tray) return;
+  
+  const greenIcon = nativeImage.createFromPath(path.join(__dirname, 'public', 'tray-icon-green.svg'));
+  const redIcon = nativeImage.createFromPath(path.join(__dirname, 'public', 'tray-icon-red.svg'));
+  
+  const iconSize = process.platform === 'darwin' ? 16 : 32;
+  const resizedGreenIcon = greenIcon.resize({ width: iconSize, height: iconSize });
+  const resizedRedIcon = redIcon.resize({ width: iconSize, height: iconSize });
+  
+  tray.setImage(isRunning ? resizedGreenIcon : resizedRedIcon);
+  tray.setToolTip(`Tend Devtools - Server ${isRunning ? 'Running' : 'Stopped'}`);
+  updateTrayMenu();
+}
+
+async function startService() {
+  if (serviceState.running) return { ok: true };
+  try {
+    await startDnsServer();
+    await startCaddyWithMappings();
+    await updateSystemDNS();
+    serviceState.running = true;
+    updateTrayIcon(true);
+    return { ok: true };
+  } catch (e) {
+    // Attempt partial cleanup
+    try { await stopCaddy(); } catch {}
+    try { await stopDnsServer(); } catch {}
+    serviceState.running = false;
+    updateTrayIcon(false);
+    return { ok: false, error: String(e) };
+  }
+}
+
+async function stopService() {
+  try {
+    await stopCaddy();
+    await stopDnsServer();
+    await cleanupSystemDNS();
+    serviceState.running = false;
+    updateTrayIcon(false);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
   }
 }
 
@@ -348,13 +473,24 @@ const createWindow = () => {
     },
   });
 
+  mainWindow = win;
+
   // Always use the development URL during development
   const isDev = !app.isPackaged;
   if (isDev) {
     win.loadURL("http://localhost:5173/");
   } else {
-    win.loadFile(path.join(__dirname, "index.html"));
+    // In production, load the built files from the dist directory
+    win.loadFile(path.join(__dirname, "dist", "index.html"));
   }
+  
+  // Handle window close - minimize to tray instead of quitting
+  win.on('close', (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
 };
 
 app.whenReady().then(() => {
@@ -601,46 +737,59 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('service:start', async () => {
-    if (serviceState.running) return { ok: true };
-    try {
-      await startDnsServer();
-      await startCaddyWithMappings();
-      await updateSystemDNS();
-      serviceState.running = true;
-      return { ok: true };
-    } catch (e) {
-      // Attempt partial cleanup
-      try { await stopCaddy(); } catch {}
-      try { await stopDnsServer(); } catch {}
-      serviceState.running = false;
-      return { ok: false, error: String(e) };
-    }
+    return await startService();
   });
 
   ipcMain.handle('service:stop', async () => {
-    try {
-      await stopCaddy();
-      await stopDnsServer();
-      await cleanupSystemDNS();
-      serviceState.running = false;
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: String(e) };
-    }
+    return await stopService();
   });
 
   ipcMain.handle('service:status', async () => {
     return { running: serviceState.running };
   });
 
+  ipcMain.handle('tray:showWindow', async () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    return true;
+  });
+
+  ipcMain.handle('tray:hideWindow', async () => {
+    if (mainWindow) {
+      mainWindow.hide();
+    }
+    return true;
+  });
+
   createWindow();
+  createTray();
+  
+  // Register global shortcut for showing/hiding window
+  globalShortcut.register('CommandOrControl+Shift+T', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }
+  });
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  // Don't quit the app when all windows are closed
+  // The app will continue running in the system tray
 });
 
 app.on('before-quit', async () => {
+  app.isQuiting = true;
   try { await stopCaddy(); } catch {}
   try { await stopDnsServer(); } catch {}
+  if (tray) {
+    tray.destroy();
+  }
+  globalShortcut.unregisterAll();
 });

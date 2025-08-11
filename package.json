@@ -4,14 +4,29 @@
   "version": "0.0.0",
   "type": "module",
   "main": "main.js",
+  "build": {
+    "appId": "com.tend.devtools",
+    "productName": "Tend Devtools",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.cjs",
+      "public/**/*"
+    ],
+    "mac": {
+      "target": "dmg"
+    }
+  },
   "scripts": {
     "dev": "concurrently \"pnpm run dev-vite\" \"pnpm run dev-electron\"",
     "dev-vite": "vite",
     "dev-electron": "wait-on http://localhost:5173 && electron .",
     "lint": "eslint .",
     "preview": "vite preview",
-    "build": "vite build && electron-builder",
-    "dns": "sudo tsx scripts/dns-server.ts"
+    "build": "vite build && electron-builder"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.5",

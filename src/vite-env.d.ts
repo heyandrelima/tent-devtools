@@ -11,6 +11,8 @@ declare global {
       startService: () => Promise<{ ok: boolean; error?: string }>;
       stopService: () => Promise<{ ok: boolean; error?: string }>;
       serviceStatus: () => Promise<{ running: boolean }>;
+      showWindow: () => Promise<boolean>;
+      hideWindow: () => Promise<boolean>;
     };
   }
 }

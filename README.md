@@ -186,11 +186,23 @@ Consider adding scripts to manage DNS/Caddy, for example:
 - Running a DNS server on port 53 requires elevated privileges on macOS.
 - Caddy’s `tls internal` issues and trusts a local CA; Keychain access may prompt on first run.
 
+## System Tray
+
+The app runs in the system tray, allowing you to:
+
+- **Minimize to tray**: Close the window to minimize to system tray instead of quitting
+- **Tray icon status**: Green icon when server is running, red when stopped
+- **Quick access**: Click tray icon to show/hide the main window
+- **Keyboard shortcut**: Use `Cmd+Shift+T` (macOS) or `Ctrl+Shift+T` (Windows/Linux) to toggle window visibility
+- **Context menu**: Right-click tray icon for quick actions:
+  - Show Window
+  - Start/Stop Server
+  - Quit
+
 ## Roadmap
 
-- UI to add/remove domain → port mappings
-- Tray app to start/stop DNS and Caddy
 - Cross‑platform setup helpers (Windows/Linux)
+- Additional tray features and notifications
 
 ## License
 
