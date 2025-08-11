@@ -1,110 +1,197 @@
-# Vite + React + TypeScript + Electron + Tailwind CSS Starter
+### Tend Devtools
 
-This template provides a minimal setup to kickstart a desktop application using **Vite**, **React**, **TypeScript**, **Electron**, and **Tailwind CSS**. It includes hot module replacement (HMR), ESLint configuration, and a streamlined development workflow.
+Tools to streamline your local development environment with human-friendly domains.
 
-## Features
+## What it does
 
-- **Vite**: Fast build tool with HMR for a smooth development experience.
-- **React**: A powerful library for building user interfaces.
-- **TypeScript**: Static typing for better code quality and maintainability.
-- **Electron**: Build cross-platform desktop applications.
-- **Tailwind CSS**: Utility-first CSS framework for rapid UI development.
-- **ESLint**: Pre-configured linting for consistent and error-free code.
+- **Local DNS server (Node + dns2)**: Resolve custom domains like `project.test` and subdomains such as `api.project.test` to your machine.
+- **Local web server (Caddy)**: Terminate TLS locally (`tls internal`) and reverse‑proxy custom domains to your running apps (for example, `project.test` → `localhost:3000`).
+- **Subdomain support**: Map multiple subdomains to different local ports for multi‑service apps.
 
-## Getting Started
+## Why
 
-### Prerequisites
+- **Human‑readable URLs** for microservices and apps.
+- **Cookie and CORS parity** across subdomains in dev.
+- **Automatic local HTTPS** using Caddy’s internal CA.
 
-Ensure you have the following installed:
+## Prerequisites
 
-- [Node.js](https://nodejs.org/) (v16 or higher recommended)
-- [pnpm](https://pnpm.io/) (preferred package manager)
+- macOS (tested), admin privileges for binding DNS on port 53
+- Node.js 18+
+- pnpm
+- Caddy (`brew install caddy`)
 
-### Installation
+## Quickstart (UI)
 
-1. Clone this repository:
-
-   ```bash
-   git clone https://github.com/your-repo/vite-react-tailwind-electron.git
-   cd vite-react-tailwind-electron
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   pnpm install
-   ```
-
-### Development
-
-To start the development server and Electron app:
+The UI is built with Vite + React + Electron.
 
 ```bash
-pnpm run dev
+pnpm install
+pnpm dev
 ```
 
-This will:
+This starts the Vite dev server and launches the Electron wrapper.
 
-- Start the Vite development server on `http://localhost:5173`.
-- Launch the Electron app and load the Vite server.
+## Local DNS setup (Node + dns2)
 
-### Build
+Tend Devtools uses a lightweight Node DNS server so that domains ending in `.test` resolve to `127.0.0.1`.
 
-To build the production-ready Electron app:
+1) Install dependency
 
 ```bash
-pnpm run build
+pnpm add dns2
 ```
 
-This will bundle the Vite app and package the Electron app using `electron-builder`.
+2) Create a DNS server script (example)
 
-### Linting
+Create `scripts/dns-server.ts` (or `.js`) with a minimal responder using `dns2`:
 
-To lint your code:
+```ts
+import { UDPServer } from 'dns2';
+
+const HOST = '127.0.0.1';
+const PORT = 53; // requires sudo on macOS
+
+const server = UDPServer({
+  udp: { address: HOST, port: PORT },
+  handle: (request, send) => {
+    const [question] = request.questions;
+    const name = question?.name.toLowerCase();
+    const isTestDomain = name.endsWith('.test');
+    const answerIp = isTestDomain ? '127.0.0.1' : '0.0.0.0';
+
+    send({
+      id: request.id,
+      type: 'response',
+      questions: request.questions,
+      answers: isTestDomain
+        ? [{
+            name,
+            type: 'A',
+            class: 'IN',
+            ttl: 1,
+            address: answerIp,
+          }]
+        : [],
+    });
+  },
+});
+
+server.on('listening', () => console.log(`DNS listening on ${HOST}:${PORT}`));
+server.on('close', () => console.log('DNS stopped'));
+```
+
+Run it (requires sudo to bind port 53 on macOS):
 
 ```bash
-pnpm run lint
+sudo node scripts/dns-server.js
 ```
 
-## Project Structure
+3) Tell macOS to use your local DNS for `.test`
 
-```
-├── public/               # Static assets
-├── src/                  # Source code
-│   ├── assets/           # Images and other assets
-│   ├── App.tsx           # Main React component
-│   ├── main.tsx          # React entry point
-│   ├── vite-env.d.ts     # Vite environment types
-├── main.js               # Electron main process
-├── index.html            # HTML template
-├── package.json          # Project metadata and scripts
-├── vite.config.ts        # Vite configuration
-├── tailwind.config.js    # Tailwind CSS configuration
-├── tsconfig.json         # TypeScript configuration
-└── tsconfig.app.json     # Additional TypeScript configuration
+Create the resolver file:
+
+```bash
+sudo mkdir -p /etc/resolver
+echo 'nameserver 127.0.0.1' | sudo tee /etc/resolver/test >/dev/null
 ```
 
-## Dependencies
+Verify DNS resolution:
 
-### Core Dependencies
+```bash
+dig +short project.test @127.0.0.1
+# 127.0.0.1
+```
 
-- `react`: UI library
-- `react-dom`: React DOM rendering
-- `electron`: Desktop app framework
-- `tailwindcss`: CSS framework
+If macOS caches an old result, flush DNS:
 
-### Development Dependencies
+```bash
+sudo killall -HUP mDNSResponder
+```
 
-- `vite`: Build tool
-- `@vitejs/plugin-react`: React plugin for Vite
-- `typescript`: TypeScript support
-- `eslint`: Linting tool
-- `typescript-eslint`: TypeScript linting rules
-- `eslint-plugin-react-hooks`: React hooks linting
-- `eslint-plugin-react-refresh`: React Fast Refresh linting
-- `concurrently`: Run multiple commands concurrently
-- `wait-on`: Wait for resources to be available
+## Local web server (Caddy) setup
+
+Use Caddy to terminate TLS locally and reverse‑proxy custom domains to your apps.
+
+1) Install Caddy
+
+```bash
+brew install caddy
+```
+
+2) Create a Caddyfile
+
+Create `public/caddy/Caddyfile` with mappings. Example:
+
+```caddyfile
+# Root domain → React app on :3000
+project.test {
+  tls internal
+  reverse_proxy localhost:3000
+}
+
+# Subdomain → API on :3001
+api.project.test {
+  tls internal
+  reverse_proxy localhost:3001
+}
+
+# Wildcard for any other subdomain → :3002
+*.project.test {
+  tls internal
+  reverse_proxy localhost:3002
+}
+```
+
+3) Run Caddy
+
+```bash
+caddy run --config public/caddy/Caddyfile
+```
+
+Visit `https://project.test` to see your app via Caddy with a locally trusted certificate. If trust fails, try:
+
+```bash
+sudo caddy trust
+```
+
+## Example mapping
+
+- `project.test` → `http://localhost:3000`
+- `api.project.test` → `http://localhost:3001`
+- `admin.project.test` → `http://localhost:3002`
+
+You can add more site blocks to the Caddyfile for additional services.
+
+## Development scripts
+
+- `pnpm dev`: Run the Vite dev server and Electron shell
+- `pnpm build`: Build the UI bundle and Electron app
+- `pnpm lint`: Lint the codebase
+
+Consider adding scripts to manage DNS/Caddy, for example:
+
+```json
+{
+  "scripts": {
+    "dns": "sudo node scripts/dns-server.js",
+    "caddy": "caddy run --config public/caddy/Caddyfile"
+  }
+}
+```
+
+## Notes and tips
+
+- The `.test` TLD is reserved for testing and safe to use locally.
+- Running a DNS server on port 53 requires elevated privileges on macOS.
+- Caddy’s `tls internal` issues and trusts a local CA; Keychain access may prompt on first run.
+
+## Roadmap
+
+- UI to add/remove domain → port mappings
+- Tray app to start/stop DNS and Caddy
+- Cross‑platform setup helpers (Windows/Linux)
 
 ## License
 
-This project is licensed under the MIT License. Feel free to use it as a starting point for your own projects.
+TBD
